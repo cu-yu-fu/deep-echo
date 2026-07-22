@@ -1,0 +1,1820 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Gemini Voice Agent - Smart Speaker</title>
+  <!-- Google Fonts Outfit & M PLUS Rounded 1c -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=M+PLUS+Rounded+1c:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      /* ベースカラー: 黒・ダークグレー系の無彩色パレット */
+      --bg-gradient: linear-gradient(160deg, #0a0a0a 0%, #111111 50%, #080808 100%);
+      --accent-color: #e0e0e0;
+      --accent-glow: rgba(220, 220, 220, 0.15);
+      /* ステータス識別色は維持 */
+      --recording-color: #ff5e7e;
+      --recording-glow: rgba(255, 94, 126, 0.4);
+      --thinking-color: #2cb67d;
+      --thinking-glow: rgba(44, 182, 125, 0.4);
+      --speaking-color: #3da9fc;
+      --speaking-glow: rgba(61, 169, 252, 0.4);
+      --card-bg: rgba(255, 255, 255, 0.03);
+      --card-border: rgba(255, 255, 255, 0.07);
+      --text-main: #f0f0f0;
+      --text-sub: #888888;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: 'Outfit', 'M PLUS Rounded 1c', sans-serif;
+      background: var(--bg-gradient);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      overflow-x: hidden;
+      padding: 0.75rem 0.75rem 1rem; /* 各パネルの左右余白を圧縮 */
+    }
+
+    header {
+      display: none;
+    }
+
+    /* Main Speaker Orb Section */
+    main {
+      flex: 0 0 auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      width: 100%;
+      max-width: 600px;
+      margin: 0.25rem 0;
+      position: relative;
+    }
+
+    .orb-container {
+      position: relative;
+      width: 260px;
+      height: 260px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .orb-outer-glow {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: var(--accent-glow);
+      filter: blur(40px);
+      transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      z-index: 1;
+      opacity: 0.6;
+    }
+
+    .orb {
+      position: relative;
+      width: 160px;
+      height: 160px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.12) 0%, rgba(0,0,0,0.6) 100%), #1a1a1a;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.7), inset 0 2px 4px rgba(255,255,255,0.08);
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    /* Wave effect rings */
+    .orb-wave {
+      position: absolute;
+      width: 160px;
+      height: 160px;
+      border-radius: 50%;
+      border: 2px solid var(--accent-color);
+      opacity: 0;
+      z-index: 1;
+      transform: scale(1);
+      pointer-events: none;
+    }
+
+    /* App States Styling */
+    /* 1. Recording State */
+    .state-recording .orb {
+      background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.2) 0%, rgba(0,0,0,0.4) 100%), var(--recording-color);
+      transform: scale(1.05);
+    }
+    .state-recording .orb-outer-glow {
+      background: var(--recording-glow);
+    }
+    .state-recording .orb-wave {
+      border-color: var(--recording-color);
+      animation: wave-pulse 1.5s infinite linear;
+    }
+
+    /* 2. Thinking State */
+    .state-thinking .orb {
+      background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.2) 0%, rgba(0,0,0,0.4) 100%), var(--thinking-color);
+    }
+    .state-thinking .orb-outer-glow {
+      background: var(--thinking-glow);
+    }
+    .state-thinking .orb {
+      animation: pokupoku-jump var(--poku-duration, 0.6s) infinite cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+
+    /* 3. Speaking State */
+    .state-speaking .orb {
+      background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.2) 0%, rgba(0,0,0,0.4) 100%), var(--speaking-color);
+      transform: scale(var(--orb-scale, 1.0));
+    }
+    .state-speaking .orb-outer-glow {
+      background: var(--speaking-glow);
+      filter: blur(calc(30px + var(--orb-scale-glow, 10px)));
+    }
+
+    @keyframes wave-pulse {
+      0% {
+        transform: scale(1);
+        opacity: 0.8;
+      }
+      100% {
+        transform: scale(1.8);
+        opacity: 0;
+      }
+    }
+
+    @keyframes pokupoku-jump {
+      0%, 100% {
+        transform: translateY(0) scale(1);
+      }
+      20% {
+        transform: translateY(-12px) scale(0.95, 1.05);
+      }
+      40% {
+        transform: translateY(2px) scale(1.05, 0.95);
+      }
+      60% {
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    .mic-icon {
+      width: 48px;
+      height: 48px;
+      fill: var(--text-main);
+      transition: all 0.3s ease;
+    }
+
+    /* .orb-hint (statusHint) は削除ため非表示 */
+    .orb-hint { display: none; }
+
+    /* Info Area (Context / Log) */
+    .info-container {
+      width: 100%;
+      max-width: 600px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      padding: 0.75rem;
+      margin-bottom: 1rem; /* 下マージンを縮小 */
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    }
+
+    .context-box {
+      font-size: 0.85rem;
+      background: rgba(200, 200, 200, 0.05);
+      border-left: 3px solid var(--text-sub);
+      border-radius: 4px;
+      color: #aaaaaa;
+      font-weight: 600;
+      opacity: 0;
+      visibility: hidden;
+      max-height: 0;
+      padding: 0 0.75rem;
+      overflow: hidden;
+      transition: opacity 0.3s ease, max-height 0.3s ease, padding 0.3s ease;
+    }
+
+    .context-box.active {
+      opacity: 1;
+      visibility: visible;
+      max-height: 100px;
+      padding: 0.5rem 0.75rem;
+    }
+
+    .transcript-box {
+      height: 320px; /* 320pxへ大幅拡張 */
+      overflow-y: auto;
+      font-size: 0.85rem;
+      line-height: 1.5;
+      color: var(--text-sub);
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      padding-right: 0.25rem;
+    }
+
+    /* Custom Scrollbar for transcript */
+    .transcript-box::-webkit-scrollbar {
+      width: 4px;
+    }
+    .transcript-box::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .transcript-box::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.1);
+      border-radius: 10px;
+    }
+
+    .log-item {
+      padding: 0.25rem 0.4rem;
+      border-radius: 8px;
+      white-space: pre-line;
+    }
+    .log-user {
+      background: rgba(255, 255, 255, 0.02);
+      align-self: flex-end;
+      color: var(--text-main);
+      max-width: 85%;
+      border: 1px solid rgba(255,255,255,0.03);
+    }
+    .log-assistant {
+      align-self: flex-start;
+      color: #8be9fd;
+      max-width: 100%;
+    }
+    .log-assistant.log-response {
+      color: var(--text-main);
+    }
+
+    /* Settings Section (Accordion) */
+    .settings-container {
+      width: 100%;
+      max-width: 600px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      overflow: hidden;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+      transition: all 0.3s ease;
+    }
+
+    .settings-header {
+      padding: 1rem 0.75rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+      font-weight: 600;
+      color: var(--text-sub);
+      font-size: 0.9rem;
+      background: rgba(255,255,255,0.01);
+      transition: background 0.2s ease;
+    }
+
+    .settings-header:hover {
+      background: rgba(255,255,255,0.03);
+      color: var(--text-main);
+    }
+
+    .settings-arrow {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+      transition: transform 0.3s ease;
+    }
+
+    .settings-content {
+      max-height: 0;
+      overflow-y: auto;
+      transition: max-height 0.3s ease-out;
+      padding: 0 0.75rem;
+    }
+
+    .settings-container.open .settings-content {
+      max-height: 420px; /* Adjust according to contents */
+      padding: 0.5rem 0.75rem 1.25rem;
+    }
+
+    .settings-container.open .settings-arrow {
+      transform: rotate(180deg);
+    }
+
+    .form-group {
+      margin-bottom: 1rem;
+    }
+
+    .form-group:last-child {
+      margin-bottom: 0;
+    }
+
+    label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-sub);
+      margin-bottom: 0.35rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    input[type="text"], input[type="password"], select, textarea {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      padding: 0.6rem 0.75rem;
+      color: var(--text-main);
+      font-family: inherit;
+      font-size: 0.85rem;
+      outline: none;
+      transition: border-color 0.2s ease;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--accent-color);
+      box-shadow: 0 0 0 2px rgba(127, 90, 240, 0.25);
+    }
+
+    .row {
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    .row > .form-group {
+      flex: 1;
+    }
+
+    .btn {
+      display: inline-block;
+      width: 100%;
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 8px;
+      padding: 0.6rem 1rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-align: center;
+    }
+
+    .btn:hover {
+      background: rgba(255,255,255,0.18);
+      box-shadow: 0 0 12px rgba(255,255,255,0.1);
+    }
+
+    .btn-secondary {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--card-border);
+      color: var(--text-sub);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255,255,255,0.1);
+      color: var(--text-main);
+      box-shadow: none;
+    }
+
+    .wake-lock-indicator {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.75rem;
+      color: var(--text-sub);
+      margin-top: 0.5rem;
+    }
+
+    .wake-lock-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #72757e;
+    }
+    .wake-lock-dot.active {
+      background: var(--thinking-color);
+      box-shadow: 0 0 8px var(--thinking-color);
+    }
+
+    /* Key help overlay */
+    .key-badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 4px;
+      padding: 0.1rem 0.35rem;
+      font-family: monospace;
+      font-size: 0.75rem;
+      color: var(--text-main);
+    }
+
+    /* テキスト入力エリア */
+    .text-input-row {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      width: 100%;
+      max-width: 600px;
+      margin: 0.5rem auto 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    #textInput {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 24px;
+      color: var(--text-main);
+      font-family: inherit;
+      font-size: 0.9rem;
+      padding: 0.6rem 1.1rem;
+      outline: none;
+      transition: border-color 0.2s, background 0.2s;
+      -webkit-appearance: none;
+    }
+    #textInput::placeholder {
+      color: rgba(255,255,255,0.3);
+    }
+    #textInput:focus {
+      border-color: rgba(200, 200, 200, 0.4);
+      background: rgba(255, 255, 255, 0.09);
+    }
+    #textInput:disabled {
+      opacity: 0.35;
+      pointer-events: none;
+    }
+
+    #textSendBtn {
+      flex-shrink: 0;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(255,255,255,0.12);
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+      transition: opacity 0.2s, transform 0.15s;
+    }
+    #textSendBtn:active { transform: scale(0.92); }
+    #textSendBtn:disabled {
+      opacity: 0.3;
+      pointer-events: none;
+    }
+    #textSendBtn svg {
+      width: 18px;
+      height: 18px;
+      fill: #fff;
+    }
+
+    /* footerは削除ため非表示 */
+    footer { display: none; }
+
+    /* 録音時間制限プログレスバー */
+    .recording-progress-container {
+      width: 80%;
+      max-width: 320px;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 4px;
+      margin: 0.8rem auto 0 auto;
+      overflow: visible;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+    }
+    .recording-progress-container.active {
+      opacity: 1;
+    }
+    .recording-progress-bar {
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, #555555, #cccccc);
+      border-radius: 4px;
+      transition: width 0.1s linear, background 0.3s ease;
+    }
+    .recording-progress-bar.warning {
+      background: linear-gradient(90deg, #f59e0b, #ef4444);
+      animation: pulse-progress 1.5s infinite alternate;
+    }
+    .recording-progress-text {
+      font-size: 0.7rem;
+      color: var(--text-sub);
+      margin-top: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+    }
+    .recording-progress-text.warning {
+      color: #ef4444;
+      font-weight: bold;
+    }
+    @keyframes pulse-progress {
+      0% { opacity: 0.7; }
+      100% { opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+  <main>
+    <div class="orb-container" id="orbBtn" onclick="toggleInteraction()">
+      <div class="orb-outer-glow"></div>
+      <div class="orb-wave"></div>
+      <div class="orb">
+        <!-- Mic Icon SVG -->
+        <svg class="mic-icon" id="micIcon" viewBox="0 0 24 24">
+          <path d="M12,14A3,3 0 0,0 15,11V5A3,3 0 0,0 12,2A3,3 0 0,0 9,5V11A3,3 0 0,0 12,14M17.3,11C17.3,14 14.76,16.2 12,16.2C9.24,16.2 6.7,14 6.7,11H5C5,14.41 7.72,17.2 11,17.68V21H13V17.68C16.28,17.2 19,14.41 19,11H17.3Z" />
+        </svg>
+      </div>
+    </div>
+
+    <!-- 録音時間制限プログレスバー -->
+    <div id="recordingProgressContainer" class="recording-progress-container">
+      <div id="recordingProgressBar" class="recording-progress-bar"></div>
+    </div>
+
+    <!-- テキスト入力エリア -->
+    <div class="text-input-row">
+      <input
+        type="text"
+        id="textInput"
+        placeholder="テキストで入力..."
+        autocomplete="off"
+        autocorrect="off"
+        spellcheck="false"
+        onkeydown="handleTextInputKey(event)"
+      >
+      <button id="textSendBtn" onclick="submitTextInput()" title="送信">
+        <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+      </button>
+    </div>
+  </main>
+
+  <div class="info-container">
+    <div id="contextBox" class="context-box"></div>
+    <div id="transcriptBox" class="transcript-box">
+      <div class="log-item log-assistant">初期化完了。上のマイクボタンをタップ、または <span class="key-badge">Space</span>/<span class="key-badge">Enter</span>/<span class="key-badge">音量キー</span> で会話を開始できます。</div>
+    </div>
+  </div>
+
+  <div class="settings-container" id="settingsContainer">
+    <div class="settings-header" onclick="toggleSettings()">
+      <span>設定</span>
+      <svg class="settings-arrow" viewBox="0 0 24 24">
+        <path d="M7.41,8.58L12,13.17L16.59,8.58L18,10L12,16L6,10L7.41,8.58Z" />
+      </svg>
+    </div>
+    <div class="settings-content">
+      <div class="form-group">
+        <label for="apiKey">Gemini API Key</label>
+        <input type="password" id="apiKey" placeholder="AIzaSy..." onchange="saveSettings()">
+      </div>
+
+      <div class="row">
+        <div class="form-group">
+          <label for="modelThink">モデル (Gemini)</label>
+          <input type="text" id="modelThink" value="gemini-3.1-flash-lite-preview" onchange="saveSettings()">
+        </div>
+        <div class="form-group">
+          <label for="modelLive">モデル (Live)</label>
+          <input type="text" id="modelLive" value="gemini-3.1-flash-live-preview" onchange="saveSettings()">
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="form-group">
+          <label for="thinkingBudgetThink">思考レベル (Gemini)</label>
+          <select id="thinkingBudgetThink" onchange="saveSettings()">
+            <option value="MINIMAL">MINIMAL</option>
+            <option value="LOW">LOW</option>
+            <option value="MEDIUM">MEDIUM</option>
+            <option value="HIGH">HIGH</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="thinkingBudgetLive">思考レベル (Live)</label>
+          <select id="thinkingBudgetLive" onchange="saveSettings()">
+            <option value="MINIMAL">MINIMAL</option>
+            <option value="LOW">LOW</option>
+            <option value="MEDIUM">MEDIUM</option>
+            <option value="HIGH">HIGH</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="form-group">
+          <label for="voiceSelect">Live音声キャラクター</label>
+          <select id="voiceSelect" onchange="saveSettings()">
+            <option value="Puck">Puck</option>
+            <option value="Charon">Charon</option>
+            <option value="Kore">Kore</option>
+            <option value="Fenrir">Fenrir</option>
+            <option value="Aoede">Aoede</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>スリープ防止</label>
+          <div class="wake-lock-indicator">
+            <div id="wakeLockDot" class="wake-lock-dot"></div>
+            <span id="wakeLockText">非アクティブ</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="sysInstructionThink">システム命令 (Gemini)</label>
+        <textarea id="sysInstructionThink" rows="2" onchange="saveSettings()">回答の先頭に必ず `(ユーザーの目的: 〇〇)` を付与し、その後に論理的な回答テキストを出力してください。</textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="sysInstructionLive">システム命令 (Live)</label>
+        <textarea id="sysInstructionLive" rows="2" onchange="saveSettings()">あなたは優秀な解説者です。与えられたデータを自分の言葉で分かりやすく解説してください</textarea>
+      </div>
+
+      <div class="row" style="margin-top: 0.5rem;">
+        <div style="flex: 1;">
+          <button class="btn btn-secondary" onclick="resetSettingsToDefaults()">設定初期化</button>
+        </div>
+        <div style="flex: 1;">
+          <button class="btn" onclick="saveSettings()">設定保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Gemini Smart Speaker Client - Serverless Edition
+  </footer>
+
+  <script>
+    // -------------------------------------------------------------------------
+    // 状態管理＆定数定義
+    // -------------------------------------------------------------------------
+    let appStatus = 'idle'; // 'idle', 'recording', 'thinking', 'speaking'
+    // キャンセル済みの非同期ターンを識別し、遅れて届く応答を破棄する。
+    let sessionGeneration = 0;
+    let apiKey = '';
+    const DEFAULT_SETTINGS = Object.freeze({
+      modelThink: 'gemini-3.5-flash-lite',
+      modelLive: 'gemini-3.1-flash-live-preview',
+      voiceName: 'Puck',
+      sysInstructionThink: 'あなたはLive API用のカンペの出力システムです。回答の先頭に必ず `(ユーザーの目的: 〇〇)` を付与し、その後にユーザーの目的を満たす回答テキストを詳細に出力してください。',
+      sysInstructionLive: '入力データはカンペです。「このテキストでは～～」のように客観的ではなく、自身の言葉として活用し、ユーザーの目的を満たす音声を出力してください。また、ユーザーへの御用聞きは禁止です。',
+      thinkingBudgetThink: 'HIGH',
+      thinkingBudgetLive: 'HIGH'
+    });
+    let config = { ...DEFAULT_SETTINGS };
+
+    // マイク録音タイマー＆音量監視
+    let recordingAnimationRequestId = null;
+    let maxVolumeDetected = 0;
+    let recAnalyser = null;
+    let recordingStartTime = 0; // 最小録音時間ガード用（startRecordingProcessで更新）
+
+    // 音声および対話コンテキスト
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let conversationHistory = []; // Flash Lite用の簡易履歴 (Chat形式)
+    let lastUserPurpose = '';
+
+    // Web Audio API
+    let audioCtx = null;
+    let analyser = null;
+    let nextPlayTime = 0;
+    const LIVE_SAMPLE_RATE = 24000;
+    let activeSourceNodes = [];
+
+    // ポクポク木魚音
+    let pokupokuIntervalId = null;
+    let pokupokuGainNode = null;
+
+    // Wake Lock
+    let wakeLock = null;
+
+    // Live API WebSocket
+    let liveWebSocket = null;
+    let isServerTurnComplete = false; // サーバーがデータを送りきったか
+    let pendingChunks = 0;           // 再生中/待機中の音声チャンク数
+
+    // -------------------------------------------------------------------------
+    // 初期化と設定のロード
+    // -------------------------------------------------------------------------
+    window.addEventListener('DOMContentLoaded', () => {
+      loadSettings();
+      setupKeyListeners();
+      
+      // 初回のアクティベーション（Wake Lock、AudioContextの確保）は
+      // ユーザーの最初のアクション（画面タップ）に委ねる
+      requestWakeLock();
+    });
+
+    function loadSettings() {
+      const storedKey = localStorage.getItem('gemini_api_key');
+      if (storedKey) {
+        document.getElementById('apiKey').value = storedKey;
+        apiKey = storedKey;
+      }
+
+      const storedConfig = localStorage.getItem('gemini_speaker_config');
+      if (storedConfig) {
+        try {
+          const parsed = JSON.parse(storedConfig);
+          config = { ...config, ...parsed };
+          
+          document.getElementById('modelThink').value = config.modelThink;
+          document.getElementById('modelLive').value = config.modelLive;
+          document.getElementById('voiceSelect').value = config.voiceName;
+          document.getElementById('sysInstructionThink').value = config.sysInstructionThink;
+          document.getElementById('sysInstructionLive').value = config.sysInstructionLive;
+          if (config.thinkingBudgetThink) {
+            document.getElementById('thinkingBudgetThink').value = config.thinkingBudgetThink;
+          }
+          if (config.thinkingBudgetLive) {
+            document.getElementById('thinkingBudgetLive').value = config.thinkingBudgetLive;
+          }
+        } catch (e) {
+          console.error('Failed to parse stored config', e);
+        }
+      }
+
+      applyConfigToForm();
+    }
+
+    function applyConfigToForm(settings = config) {
+      document.getElementById('modelThink').value = settings.modelThink;
+      document.getElementById('modelLive').value = settings.modelLive;
+      document.getElementById('voiceSelect').value = settings.voiceName;
+      document.getElementById('sysInstructionThink').value = settings.sysInstructionThink;
+      document.getElementById('sysInstructionLive').value = settings.sysInstructionLive;
+      document.getElementById('thinkingBudgetThink').value = settings.thinkingBudgetThink;
+      document.getElementById('thinkingBudgetLive').value = settings.thinkingBudgetLive;
+    }
+
+    function saveSettings(message = '設定を保存しました') {
+      apiKey = document.getElementById('apiKey').value.trim();
+      localStorage.setItem('gemini_api_key', apiKey);
+
+      config.modelThink = document.getElementById('modelThink').value.trim();
+      config.modelLive = document.getElementById('modelLive').value.trim();
+      config.voiceName = document.getElementById('voiceSelect').value;
+      config.sysInstructionThink = document.getElementById('sysInstructionThink').value.trim();
+      config.sysInstructionLive = document.getElementById('sysInstructionLive').value.trim();
+      config.thinkingBudgetThink = document.getElementById('thinkingBudgetThink').value;
+      config.thinkingBudgetLive = document.getElementById('thinkingBudgetLive').value;
+
+      localStorage.setItem('gemini_speaker_config', JSON.stringify(config));
+      showToast(message);
+    }
+
+    function resetSettingsToDefaults() {
+      config = { ...DEFAULT_SETTINGS };
+      applyConfigToForm();
+      // apiKey の入力欄と localStorage は変更せず、他の項目だけを初期化する。
+      saveSettings('設定を初期化しました。API キーは保持されています。');
+    }
+
+    function showToast(msg) {
+      // 簡易ログ表示
+      addLog(`[システム]: ${msg}`, 'assistant');
+    }
+
+    // -------------------------------------------------------------------------
+    // UI制御 & アコーディオン
+    // -------------------------------------------------------------------------
+    function toggleSettings() {
+      const container = document.getElementById('settingsContainer');
+      container.classList.toggle('open');
+    }
+
+    function setAppStatus(status) {
+      appStatus = status;
+      const body = document.body;
+
+      // Clean up existing classes
+      body.classList.remove('state-recording', 'state-thinking', 'state-speaking');
+
+      switch (status) {
+        case 'recording':
+          body.classList.add('state-recording');
+          break;
+        case 'thinking':
+          body.classList.add('state-thinking');
+          break;
+        case 'speaking':
+          body.classList.add('state-speaking');
+          break;
+      }
+    }
+
+    function addLog(text, role, variant = '') {
+      const box = document.getElementById('transcriptBox');
+      const item = document.createElement('div');
+      item.className = `log-item ${role === 'user' ? 'log-user' : 'log-assistant'} ${variant}`;
+      item.textContent = text;
+      box.appendChild(item);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function updateContextDisplay(purpose) {
+      const box = document.getElementById('contextBox');
+      if (purpose) {
+        box.textContent = purpose;
+        box.classList.add('active');
+      } else {
+        box.textContent = '';
+        box.classList.remove('active');
+      }
+    }
+
+    function clearLogsAndContext() {
+      conversationHistory = [];
+      lastUserPurpose = '';
+      document.getElementById('transcriptBox').innerHTML = '';
+      updateContextDisplay('');
+      addLog('履歴をクリアしました。新しいセッションを開始できます。', 'assistant');
+    }
+
+    // -------------------------------------------------------------------------
+    // Wake Lock API (画面消灯スリープ防止)
+    // -------------------------------------------------------------------------
+    async function requestWakeLock() {
+      if (!('wakeLock' in navigator)) {
+        console.warn('Wake Lock API not supported in this browser.');
+        return;
+      }
+      try {
+        wakeLock = await navigator.wakeLock.request('screen');
+        document.getElementById('wakeLockDot').classList.add('active');
+        document.getElementById('wakeLockText').textContent = 'アクティブ';
+        
+        wakeLock.addEventListener('release', () => {
+          document.getElementById('wakeLockDot').classList.remove('active');
+          document.getElementById('wakeLockText').textContent = '非アクティブ';
+        });
+      } catch (err) {
+        console.error('Failed to lock screen wake', err);
+      }
+    }
+
+    document.addEventListener('visibilitychange', async () => {
+      if (wakeLock !== null && document.visibilityState === 'visible') {
+        await requestWakeLock();
+      }
+    });
+
+    // -------------------------------------------------------------------------
+    // テキスト入力ユーティリティ
+    // -------------------------------------------------------------------------
+    function setTextInputEnabled(enabled) {
+      const input = document.getElementById('textInput');
+      const btn = document.getElementById('textSendBtn');
+      if (input) input.disabled = !enabled;
+      if (btn) btn.disabled = !enabled;
+    }
+
+    function handleTextInputKey(event) {
+      // Shift+Enter は改行、Enter単体で送信
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        submitTextInput();
+      }
+    }
+
+    async function submitTextInput() {
+      const input = document.getElementById('textInput');
+      const text = input ? input.value.trim() : '';
+      if (!text) return;
+      if (appStatus !== 'idle') return;
+
+      initAudioContext();
+
+      if (!apiKey) {
+        toggleSettings();
+        alert('対話を開始するには、設定パネルから API キーを入力してください。');
+        return;
+      }
+
+      // 入力欄をクリアして思考フェーズへ
+      input.value = '';
+      addLog(text, 'user');
+
+      // 音声入力と同じパイプライン：テキストを直接 runThinkingPhaseに渡す
+      runThinkingPhase(null, null, text);
+    }
+
+    // -------------------------------------------------------------------------
+    // 物理ボタン & キーボード監視 (音量キー, Enter, Space)
+    // -------------------------------------------------------------------------
+    function setupKeyListeners() {
+      window.addEventListener('keydown', (e) => {
+        // テキスト入力中のキーイベントは無視する
+        const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+        if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') {
+          return;
+        }
+
+        if (e.key === ' ' || e.key === 'Enter' || e.key === 'VolumeUp' || e.key === 'VolumeDown') {
+          e.preventDefault(); // 音量変更やスクロールなどの既定動作を防止
+          toggleInteraction();
+        }
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // Web Audio API によるシステム効果音 (SE) の動的生成
+    // -------------------------------------------------------------------------
+    function playSystemSound(type) {
+      initAudioContext();
+      if (!audioCtx) return;
+      
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      
+      osc.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      
+      if (type === 'mic_on') {
+        // 「ポンッ（高音・上昇トーン）」音量0.4に引き上げ
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, now);
+        osc.frequency.exponentialRampToValueAtTime(900, now + 0.12);
+        
+        gainNode.gain.setValueAtTime(0, now);
+        gainNode.gain.linearRampToValueAtTime(0.4, now + 0.005);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        
+        osc.start(now);
+        osc.stop(now + 0.18);
+      } else if (type === 'gentle_end') {
+        // 「フワッ（落ち着いたトーン）」再生完了・キャンセル時
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(300, now);
+        osc.frequency.exponentialRampToValueAtTime(150, now + 0.25);
+        
+        gainNode.gain.setValueAtTime(0, now);
+        gainNode.gain.linearRampToValueAtTime(0.4, now + 0.04);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+        
+        osc.start(now);
+        osc.stop(now + 0.35);
+      } else if (type === 'pico') {
+        // 「ピコン（短い高音）」時間制限通知用
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1200, now);
+        osc.frequency.exponentialRampToValueAtTime(900, now + 0.08);
+        
+        gainNode.gain.setValueAtTime(0, now);
+        gainNode.gain.linearRampToValueAtTime(0.3, now + 0.005);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+        
+        osc.start(now);
+        osc.stop(now + 0.12);
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Web Audio API による「ポクポク音」の動的生成
+    // -------------------------------------------------------------------------
+    function startPokupoku() {
+      initAudioContext();
+      
+      // ループタイマーの作成
+      const interval = 600; // 0.6秒間隔
+      
+      // CSSアニメーションのデュレーションをJSから動的に同期
+      document.documentElement.style.setProperty('--poku-duration', `${interval}ms`);
+
+      // 最初の音を鳴らす
+      playPokupokuSound();
+      
+      pokupokuIntervalId = setInterval(() => {
+        playPokupokuSound();
+      }, interval);
+    }
+
+    function initAudioContext() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function playPokupokuSound() {
+      if (!audioCtx) return;
+      
+      const now = audioCtx.currentTime;
+
+      // 木魚音はアタックが鋭く、サイン波＋急速なディケイ＋打撃音ピッチスイープで構成
+      const osc = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      
+      // 基本波形はサイン波
+      osc.type = 'triangle'; // 少し中音の詰まった音にするため三角波を採用
+      
+      // ピッチスイープ: 最初は高め(320Hz)、急速に基音(190Hz)に下げる
+      osc.frequency.setValueAtTime(320, now);
+      osc.frequency.exponentialRampToValueAtTime(190, now + 0.04);
+      
+      // アタックとデフのゲインエンベロープ
+      gainNode.gain.setValueAtTime(0, now);
+      // 一瞬で最大音量へ (アタック: 3ms)
+      gainNode.gain.linearRampToValueAtTime(0.4, now + 0.003);
+      // 急速に減衰 (ディケイ: 150ms)
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+      
+      osc.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      
+      osc.start(now);
+      osc.stop(now + 0.2);
+    }
+
+    function stopPokupoku() {
+      if (pokupokuIntervalId) {
+        clearInterval(pokupokuIntervalId);
+        pokupokuIntervalId = null;
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // 音声ストリーミング再生 (Live APIからのPCMデータ)
+    // -------------------------------------------------------------------------
+    function playPCMChunk(base64Data, generation = sessionGeneration) {
+      if (generation !== sessionGeneration) return;
+
+      pendingChunks++; // チャンク数を加算
+      initAudioContext();
+      
+      // base64からArrayBufferへ変換
+      const binaryString = atob(base64Data);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      
+      // 16-bit PCM (Little Endian, Mono, 24kHz)
+      const buffer = bytes.buffer;
+      const int16Array = new Int16Array(buffer);
+      const float32Array = new Float32Array(int16Array.length);
+      
+      for (let i = 0; i < int16Array.length; i++) {
+        float32Array[i] = int16Array[i] / 32768.0;
+      }
+      
+      const audioBuffer = audioCtx.createBuffer(1, float32Array.length, LIVE_SAMPLE_RATE);
+      audioBuffer.copyToChannel(float32Array, 0);
+      
+      const source = audioCtx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.playbackRate.value = 1.1;
+      
+      // 解析器 (AnalyserNode) を通して音量を取得できるようにする
+      source.connect(analyser);
+      analyser.connect(audioCtx.destination);
+      
+      // 再生時間を隙間なくスケジューリング
+      const startTime = Math.max(audioCtx.currentTime, nextPlayTime);
+      source.start(startTime);
+      
+      activeSourceNodes.push(source);
+      nextPlayTime = startTime + (audioBuffer.duration / 1.1);
+      
+      // 最初の音声パケットが届いた時点で「ポクポク音」を止め、解説状態(speaking)に移行
+      if (appStatus === 'thinking') {
+        stopPokupoku();
+        setAppStatus('speaking');
+        startVisualizer();
+      }
+
+      source.onended = () => {
+        if (generation !== sessionGeneration) return;
+
+        // 再生が完了したソースノードのクリーンアップ
+        activeSourceNodes = activeSourceNodes.filter(node => node !== source);
+        pendingChunks--; // チャンク数を減算
+        checkSpeakingDone();
+      };
+    }
+
+    function checkSpeakingDone() {
+      // サーバーから全データが送信完了し、かつ再生・待機中のチャンクが0個になったら完了
+      if (isServerTurnComplete && pendingChunks === 0) {
+        onSpeakingFinished();
+      }
+    }
+
+    function onSpeakingFinished() {
+      stopVisualizer();
+      // 再生完了の成一拍を見せるため100ms遅延してから「フワッ」SEを再生
+      playSystemSound('gentle_end');
+      setAppStatus('idle');
+      // WebSocketの接続をクローズしてセッション終了
+      if (liveWebSocket && liveWebSocket.readyState === WebSocket.OPEN) {
+        liveWebSocket.close();
+      }
+    }
+
+    function stopAllSpeakingAudio() {
+      activeSourceNodes.forEach(node => {
+        try { node.stop(); } catch(e) {}
+      });
+      activeSourceNodes = [];
+      nextPlayTime = 0;
+    }
+
+    // -------------------------------------------------------------------------
+    // 音声ビジュアライザ (再生中のアニメーション制御)
+    // -------------------------------------------------------------------------
+    let visualizerIntervalId = null;
+
+    function startVisualizer() {
+      if (visualizerIntervalId) return;
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      
+      visualizerIntervalId = setInterval(() => {
+        if (!analyser || appStatus !== 'speaking') return;
+        
+        analyser.getByteTimeDomainData(dataArray);
+        
+        // 音量の最大振幅 (RMS風) の計算
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          const v = (dataArray[i] - 128) / 128;
+          sum += v * v;
+        }
+        const rms = Math.sqrt(sum / dataArray.length);
+        
+        // 振幅に合わせて球体のスケールを動的に制御
+        const scale = 1.0 + rms * 1.5; // スケール変化幅を調整
+        const glowBlur = 30 + rms * 80;
+        
+        const orb = document.querySelector('.orb');
+        if (orb) {
+          orb.style.setProperty('--orb-scale', scale);
+          orb.style.setProperty('--orb-scale-glow', `${glowBlur}px`);
+        }
+      }, 50);
+    }
+
+    function stopVisualizer() {
+      if (visualizerIntervalId) {
+        clearInterval(visualizerIntervalId);
+        visualizerIntervalId = null;
+      }
+      const orb = document.querySelector('.orb');
+      if (orb) {
+        orb.style.setProperty('--orb-scale', '1.0');
+        orb.style.setProperty('--orb-scale-glow', '10px');
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // 対話フローのトグル制御 (録音開始 / 停止)
+    // -------------------------------------------------------------------------
+    async function toggleInteraction() {
+      // 音声デコーダの初期化とコンテキスト有効化
+      initAudioContext();
+      
+      if (!apiKey) {
+        toggleSettings();
+        alert('対話を開始するには、設定パネルから API キーを入力してください。');
+        return;
+      }
+
+      if (appStatus === 'idle') {
+        // 録音開始
+        playSystemSound('mic_on');
+        startRecordingProcess();
+      } else if (appStatus === 'recording') {
+        // 録音停止＆送信
+        stopRecordingProcess();
+      } else if (appStatus === 'speaking' || appStatus === 'thinking') {
+        // 発話中または思考中に割り込んで強制キャンセル
+        // まず状態を変えてからリソースを解放（ポクポク止まらないバグを防ぐ）
+        sessionGeneration++;
+        setAppStatus('idle');
+        stopAllSpeakingAudio();
+        stopPokupoku();
+        stopVisualizer();
+        if (liveWebSocket && liveWebSocket.readyState !== WebSocket.CLOSED) {
+          liveWebSocket.close();
+          liveWebSocket = null;
+        }
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // 【音声入力（録音）】
+    // -------------------------------------------------------------------------
+    async function startRecordingProcess() {
+      audioChunks = [];
+      maxVolumeDetected = 0;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: false // AGCを無効化：無音誤判定防止のため生音量で判定
+          } 
+        });
+
+        // Android/iOS Chromeに対応できるようMIMEタイプを検出
+        let mimeType = 'audio/webm';
+        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+          mimeType = 'audio/webm;codecs=opus';
+        } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+          mimeType = 'audio/mp4';
+        }
+
+        mediaRecorder = new MediaRecorder(stream, { mimeType });
+        
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunks.push(event.data);
+          }
+        };
+
+        mediaRecorder.onstop = async () => {
+          const audioBlob = new Blob(audioChunks, { type: mimeType });
+          // マイクストリームの停止 (省電力化)
+          stream.getTracks().forEach(track => track.stop());
+
+          // ガード①：録音時間が短すぎる場合はキャンセル（誤タップ防止）
+          const MIN_RECORDING_MS = 1000;
+          const recordingDuration = Date.now() - recordingStartTime;
+          if (recordingDuration < MIN_RECORDING_MS) {
+            console.log(`Recording too short (${recordingDuration}ms). Cancelling request.`);
+            playSystemSound('gentle_end');
+            setAppStatus('idle');
+            addLog('[システム]: 録音時間が短すぎたため、送信をキャンセルしました。', 'assistant');
+            return;
+          }
+
+          // ガード②：無言チェック判定 (静寂時のノイズレベルより僅かに高いしきい値)
+          const VOLUME_THRESHOLD = 0.015;
+          if (maxVolumeDetected < VOLUME_THRESHOLD) {
+            console.log(`Silence detected. Max volume was ${maxVolumeDetected.toFixed(4)}. Cancelling request.`);
+            playSystemSound('gentle_end');
+            setAppStatus('idle');
+            addLog('[システム]: 音声が検知されなかったため、送信をキャンセルしました。', 'assistant');
+            return;
+          }
+
+          // 思考フェーズへ移行
+          runThinkingPhase(audioBlob, mimeType);
+        };
+
+        recordingStartTime = Date.now(); // 録音開始時刻を記録（最小時間ガード用）
+        mediaRecorder.start();
+        setAppStatus('recording');
+
+        // 1. プログレスバータイマー (rAF) を先頭で確実にセットアップ
+        const limitMs = 180 * 1000; // 3分 = 180秒
+        const startTime = Date.now();
+        let beep30Played = false;
+        let beep15Played = false;
+        let beep5Played = false;
+        
+        const progressContainer = document.getElementById('recordingProgressContainer');
+        const progressBar = document.getElementById('recordingProgressBar');
+        
+        if (progressContainer) progressContainer.classList.add('active');
+        if (progressBar) {
+          progressBar.style.width = '0%'; // 0%→100%へ増加する方向に変更
+          progressBar.classList.remove('warning');
+        }
+
+        // 2. 音量監視の初期化（エラー絶縁：失敗してもプログレスバーは動き続ける）
+        try {
+          initAudioContext();
+          if (audioCtx) {
+            const recAudioSource = audioCtx.createMediaStreamSource(stream);
+            recAnalyser = audioCtx.createAnalyser();
+            recAnalyser.fftSize = 256;
+            recAudioSource.connect(recAnalyser);
+          }
+        } catch (e) {
+          console.warn('[Recording] Volume analyzer initialization skipped or failed:', e);
+        }
+
+        console.log('[Recording] Loop started using requestAnimationFrame. limitMs:', limitMs);
+
+        // 3. rAF (requestAnimationFrame) による滑らかで確実なプログレス描画ループ
+        const updateProgressFrame = () => {
+          const elapsed = Date.now() - startTime;
+          const remainingSec = Math.max(0, Math.ceil((limitMs - elapsed) / 1000));
+          const progressPercent = Math.min(100, (elapsed / limitMs) * 100);
+          
+          if (progressBar) {
+            progressBar.style.width = `${progressPercent}%`;
+          }
+          
+          // 音量監視（エラー絶縁：例外が起きてもタイマー更新を邪魔しない）
+          try {
+            if (recAnalyser) {
+              const dataArray = new Uint8Array(recAnalyser.frequencyBinCount);
+              recAnalyser.getByteTimeDomainData(dataArray);
+              let sum = 0;
+              for (let i = 0; i < dataArray.length; i++) {
+                const v = (dataArray[i] - 128) / 128;
+                sum += v * v;
+              }
+              const rms = Math.sqrt(sum / dataArray.length);
+              if (rms > maxVolumeDetected) {
+                maxVolumeDetected = rms;
+              }
+
+              // 録音中も波形に合わせてオーブをアニメーション
+              const orb = document.querySelector('.orb');
+              if (orb) {
+                const scale = 1.0 + rms * 1.5;
+                const glowBlur = 10 + rms * 80;
+                orb.style.setProperty('--orb-scale', scale);
+                orb.style.setProperty('--orb-scale-glow', `${glowBlur}px`);
+              }
+            }
+          } catch (e) {
+            // 音量解析失敗時も沈黙してプログレス更新を継続
+          }
+          
+          // 残り30秒：警告色へ変化 + picoSE
+          if (remainingSec <= 30 && !beep30Played) {
+            beep30Played = true;
+            playSystemSound('pico');
+            if (progressBar) progressBar.classList.add('warning');
+          }
+          // 残り15秒：picoSE
+          if (remainingSec <= 15 && !beep15Played) {
+            beep15Played = true;
+            playSystemSound('pico');
+          }
+          // 残り5秒：picoSE
+          if (remainingSec <= 5 && !beep5Played) {
+            beep5Played = true;
+            playSystemSound('pico');
+          }
+          
+          // 3分経過で強制終了
+          if (elapsed >= limitMs) {
+            recordingAnimationRequestId = null;
+            console.log('[Recording] 3-minute limit reached. Stopping recording automatically.');
+            addLog('[システム]: 録音時間制限(3分)に達したため、自動で録音を停止しました。', 'assistant');
+            stopRecordingProcess();
+            return;
+          }
+
+          recordingAnimationRequestId = requestAnimationFrame(updateProgressFrame);
+        };
+
+        recordingAnimationRequestId = requestAnimationFrame(updateProgressFrame);
+        
+      } catch (err) {
+        console.error('Recording initialization failed:', err);
+        alert('マイクのアクセスに失敗しました。セキュア接続 (HTTPS) または USB ポートフォワーディングで起動されているか確認してください。');
+      }
+    }
+
+    function stopRecordingProcess() {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        if (recordingAnimationRequestId) {
+          cancelAnimationFrame(recordingAnimationRequestId);
+          recordingAnimationRequestId = null;
+        }
+
+        const progressContainer = document.getElementById('recordingProgressContainer');
+        if (progressContainer) {
+          progressContainer.classList.remove('active');
+        }
+
+        const orb = document.querySelector('.orb');
+        if (orb) {
+          orb.style.setProperty('--orb-scale', '1.0');
+          orb.style.setProperty('--orb-scale-glow', '10px');
+        }
+
+        console.log('[Recording] stopRecordingProcess invoked. MediaRecorder stopping...');
+        mediaRecorder.stop();
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // 【回答生成（思考）】: Gemini 3.1 Flash Lite
+    // -------------------------------------------------------------------------
+    async function runThinkingPhase(audioBlob, mimeType, directText) {
+      const generation = sessionGeneration;
+      setAppStatus('thinking');
+      
+      // ポクポク音の再生開始
+      startPokupoku();
+
+      // テキスト直接入力の場合はBase64変換をスキップ
+      if (directText) {
+        await _runThinkingWithText(directText, generation);
+        return;
+      }
+
+      // 音声入力の場合：Blob を Base64 形式に変換してから処理
+      const reader = new FileReader();
+      reader.readAsDataURL(audioBlob);
+      reader.onloadend = async () => {
+        if (generation !== sessionGeneration) return;
+
+        const base64Data = reader.result.split(',')[1];
+        
+        try {
+          addLog('[音声入力完了] 解析中...', 'user');
+
+          // Gemini 3.1 Flash Lite の GenerateContent エンドポイント
+          const modelName = config.modelThink;
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+
+          // 会話履歴の構築：今回のターン（音声データ）
+          const contentsPayload = [...conversationHistory];
+          contentsPayload.push({
+            role: 'user',
+            parts: [
+              {
+                inlineData: {
+                  mimeType: mimeType.split(';')[0], // codecs除外
+                  data: base64Data
+                }
+              }
+            ]
+          });
+
+          await _callThinkingAPI(url, contentsPayload, generation);
+        } catch (err) {
+          if (generation !== sessionGeneration) return;
+
+          console.error('Thinking phase error:', err);
+          stopPokupoku();
+          setAppStatus('idle');
+          addLog(`[エラー]: ${err.message}`, 'assistant');
+        }
+      };
+      reader.onerror = () => {
+        if (generation !== sessionGeneration) return;
+
+        stopPokupoku();
+        setAppStatus('idle');
+        addLog('[エラー]: 音声データの読み込みに失敗しました。', 'assistant');
+      };
+    }
+
+    // テキスト入力パス用の思考フェーズ
+    async function _runThinkingWithText(text, generation) {
+      try {
+        const modelName = config.modelThink;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+
+        // 会話履歴の構築：今回のターン（テキストデータ）
+        const contentsPayload = [...conversationHistory];
+        contentsPayload.push({
+          role: 'user',
+          parts: [{ text }]
+        });
+
+        await _callThinkingAPI(url, contentsPayload, generation);
+      } catch (err) {
+        if (generation !== sessionGeneration) return;
+
+        console.error('Thinking phase (text) error:', err);
+        stopPokupoku();
+        setAppStatus('idle');
+        addLog(`[エラー]: ${err.message}`, 'assistant');
+      }
+    }
+
+    // 思考APIの共通呼び出しロジック
+    async function _callThinkingAPI(url, contentsPayload, generation) {
+      try {
+        let requestBody = {
+          contents: contentsPayload,
+          systemInstruction: {
+            parts: [{ text: config.sysInstructionThink }]
+          },
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 8192,
+            // 設定から思考モデルの思考レベルを動的に設定 (thinkingLevelのみに一本化)
+            thinkingConfig: {
+              thinkingLevel: config.thinkingBudgetThink || "LOW"
+            }
+          }
+        };
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(requestBody)
+        });
+
+        if (generation !== sessionGeneration) return;
+
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.error?.message || 'Gemini API Error');
+        }
+
+        const responseData = await response.json();
+        if (generation !== sessionGeneration) return;
+
+        const responseText = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        if (!responseText) {
+          throw new Error('空の応答が返されました');
+        }
+
+        console.log('Think Response:', responseText);
+
+        // 履歴は音声再生が実際に始まった時点で確定する。これにより、思考中に
+        // キャンセルされたターンはユーザー入力・応答とも履歴に残らない。
+        const lastUserPart = contentsPayload[contentsPayload.length - 1];
+        const userHistoryText = lastUserPart?.parts?.[0]?.text || '[音声によるユーザー入力]';
+
+        // 表現フェーズ（Live API）の実行
+        runSpeakingPhase(responseText, generation, { userHistoryText, responseText, committed: false });
+
+      } catch (err) {
+        if (generation !== sessionGeneration) return;
+
+        console.error('Thinking phase (_callThinkingAPI) failed:', err);
+        stopPokupoku();
+        setAppStatus('idle');
+        addLog(`[エラー]: ${err.message}`, 'assistant');
+      }
+    }
+
+    // 応答テキストから (ユーザーの目的: 〇〇) を抽出しUIに反映
+    function parseUserPurpose(text) {
+      const match = text.match(/\(ユーザーの目的:\s*([^)]+)\)/);
+      if (match && match[1]) {
+        lastUserPurpose = `目的: ${match[1].trim()}`;
+        updateContextDisplay(lastUserPurpose);
+      }
+    }
+
+    function formatResponseForDisplay(text) {
+      return text
+        .replace(/^\s*[（(]\s*ユーザーの目的\s*[:：]\s*[^)）\r\n]*[)）]\s*/u, '')
+        .trim();
+    }
+
+    function commitConversationTurn(turn, generation) {
+      if (!turn || turn.committed || generation !== sessionGeneration) return;
+
+      turn.committed = true;
+      conversationHistory.push(
+        { role: 'user', parts: [{ text: turn.userHistoryText }] },
+        { role: 'model', parts: [{ text: turn.responseText }] }
+      );
+
+      // 履歴サイズを直近10ターン（20項目）に制限
+      if (conversationHistory.length > 20) {
+        conversationHistory = conversationHistory.slice(conversationHistory.length - 20);
+      }
+
+      parseUserPurpose(turn.responseText);
+    }
+
+    // -------------------------------------------------------------------------
+    // 【音声解説（表現）】: Gemini 3.1 Live API (WebSocket)
+    // -------------------------------------------------------------------------
+    async function runSpeakingPhase(responseText, generation, historyTurn) {
+      if (generation !== sessionGeneration) return;
+
+      const displayText = formatResponseForDisplay(responseText);
+      if (displayText) addLog(displayText, 'assistant', 'log-response');
+
+      isServerTurnComplete = false; // 前回のセッションのフラグをリセット
+      pendingChunks = 0;            // チャンクカウンターをリセット
+      // Live API のWebSocket接続先
+      // w1beta の BidiGenerateContent を使用
+      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+
+      try {
+        liveWebSocket = new WebSocket(wsUrl);
+        nextPlayTime = audioCtx.currentTime;
+
+        liveWebSocket.onopen = () => {
+          if (generation !== sessionGeneration) return;
+
+          console.log('Live API WebSocket connection established. Sending setup...');
+          
+          // 1. Setupメッセージの送信 (キャメルケースに戻し、最小構成に整理)
+          const setupMsg = {
+            setup: {
+              model: `models/${config.modelLive}`,
+              generationConfig: {
+                responseModalities: ["AUDIO"],
+                speechConfig: {
+                  voiceConfig: {
+                    prebuiltVoiceConfig: {
+                      voiceName: config.voiceName
+                    }
+                  }
+                },
+                // thinkingConfigはgenerationConfig内に配置する必要がある
+                thinkingConfig: {
+                  thinkingLevel: (config.thinkingBudgetLive === "NO THINKING") ? "MINIMAL" : (config.thinkingBudgetLive || "MINIMAL")
+                }
+              },
+              systemInstruction: {
+                parts: [
+                  { text: config.sysInstructionLive }
+                ]
+              }
+            }
+          };
+
+          console.log('Sending setup:', JSON.stringify(setupMsg));
+          liveWebSocket.send(JSON.stringify(setupMsg));
+        };
+
+        // 音声を受信したかフラグ（setupCompleteの前に定義）
+        let audioReceived = false;
+        
+        // 30秒間音声が届かなかった場合の強制復帰用タイマー
+        let connectionTimeout = setTimeout(() => {
+          if (generation !== sessionGeneration) return;
+
+          if (!audioReceived) {
+            console.warn('Speaking phase connection timeout. Forcing idle recovery.');
+            stopPokupoku();
+            stopAllSpeakingAudio();
+            stopVisualizer();
+            if (liveWebSocket && liveWebSocket.readyState !== WebSocket.CLOSED) {
+              liveWebSocket.close();
+            }
+            setAppStatus('idle');
+            addLog('[Live API]: 音声の受信タイムアウトが発生したため、待機状態に強制復帰しました。', 'assistant');
+          }
+        }, 30000);
+
+        liveWebSocket.onmessage = async (event) => {
+          try {
+            if (generation !== sessionGeneration) return;
+
+            let data;
+            if (event.data instanceof Blob) {
+              // バイナリ受信の場合、テキストにデコードしてパースを試みる
+              const text = await event.data.text();
+              data = JSON.parse(text);
+            } else if (typeof event.data === 'string') {
+              data = JSON.parse(event.data);
+            } else {
+              console.warn('Unknown WebSocket message format:', typeof event.data);
+              return;
+            }
+
+            if (generation !== sessionGeneration) return;
+
+            console.log('WS Event Received:', data);
+
+            // 1. Setup完了を検知したらテキストを送信 (キャメルケース/スネークケース両対応)
+            const isSetupComplete = data.setupComplete || data.setup_complete;
+            if (isSetupComplete) {
+              console.log('Setup completed. Sending content text for speech generation...');
+              const clientContentMsg = {
+                clientContent: {
+                  turns: [
+                    {
+                      role: "user",
+                      parts: [
+                        { text: `解説対象データ: ${responseText}` }
+                      ]
+                    }
+                  ],
+                  turnComplete: true
+                }
+              };
+              liveWebSocket.send(JSON.stringify(clientContentMsg));
+              return;
+            }
+
+            // 音声データの取得 (キャメルケース/スネークケース両対応)
+            const serverContent = data.serverContent || data.server_content;
+            if (serverContent && (serverContent.modelTurn || serverContent.model_turn)) {
+              const modelTurn = serverContent.modelTurn || serverContent.model_turn;
+              const parts = modelTurn.parts;
+              for (const part of parts) {
+                const inlineData = part.inlineData || part.inline_data;
+                if (inlineData && inlineData.data) {
+                  // 音声を受信したら強制復帰用タイマーをクリア
+                  if (connectionTimeout) {
+                    clearTimeout(connectionTimeout);
+                    connectionTimeout = null;
+                  }
+                  // ストリームPCM(base64)を再生キューに追加
+                  audioReceived = true; // 音声到達フラグ
+                  commitConversationTurn(historyTurn, generation);
+                  playPCMChunk(inlineData.data, generation);
+                }
+                
+                // テキスト（もし送られてくれば）をログに蓄積
+                if (part.text) {
+                  console.log('Live Text Segment:', part.text);
+                }
+              }
+            }
+
+            // ストリーミングの終了検出 (キャメルケース/スネークケース両対応)
+            if (serverContent && (serverContent.turnComplete || serverContent.turn_complete)) {
+              console.log('Live API turn complete. Waiting for audio buffer to drain...');
+              isServerTurnComplete = true;
+              checkSpeakingDone();
+            }
+
+          } catch (e) {
+            console.error('Error parsing WebSocket message:', e);
+          }
+        };
+
+        // 音声データが一度も届かないまま切断した場合にエラー表示する
+
+        liveWebSocket.onclose = (event) => {
+          console.log(`Live API WebSocket closed (code: ${event.code}, reason: "${event.reason}", wasClean: ${event.wasClean}).`);
+          if (connectionTimeout) {
+            clearTimeout(connectionTimeout);
+            connectionTimeout = null;
+          }
+          if (generation !== sessionGeneration) return;
+
+          if (!audioReceived) {
+            // 音声が一度も届かないまま切断 → setupエラーの可能性
+            const msg = event.reason
+              ? `[Live API エラー]: ${event.reason}`
+              : `[Live API]: サーバーから音声が返ってきませんでした (code: ${event.code})。モデル名または APIキーを確認してください。`;
+            stopPokupoku();
+            setAppStatus('idle');
+            addLog(msg, 'assistant');
+          } else {
+            // turnComplete側で既にタイマーが走っているため不要
+          }
+        };
+
+        liveWebSocket.onerror = (err) => {
+          if (generation !== sessionGeneration) return;
+
+          console.error('Live API WebSocket error:', err);
+          stopPokupoku();
+          setAppStatus('idle');
+          addLog('[エラー]: Live APIとの接続でエラーが発生しました。', 'assistant');
+        };
+
+      } catch (err) {
+        if (generation !== sessionGeneration) return;
+
+        console.error('Failed to establish Live API connection:', err);
+        stopPokupoku();
+        setAppStatus('idle');
+      }
+    }
+  </script>
+</body>
+</html>
