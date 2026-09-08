@@ -939,7 +939,7 @@
     }
 
     // -------------------------------------------------------------------------
-    // 物理ボタン & キーボード監視 (音量キー, Enter, Space)
+    // 物理ボタン & キーボード監視 (音量キー, Enter, Space, MediaPlayPause)
     // -------------------------------------------------------------------------
     function setupKeyListeners() {
       window.addEventListener('keydown', (e) => {
@@ -949,11 +949,31 @@
           return;
         }
 
-        if (e.key === ' ' || e.key === 'Enter' || e.key === 'VolumeUp' || e.key === 'VolumeDown') {
-          e.preventDefault(); // 音量変更やスクロールなどの既定動作を防止
+        if (
+          e.key === ' ' || e.key === 'Enter' ||
+          e.key === 'VolumeUp' || e.key === 'VolumeDown' ||
+          e.key === 'MediaPlayPause' || e.key === 'Play' || e.key === 'Pause'
+        ) {
+          e.preventDefault(); // 音量変更やスクロール・メディア操作の既定動作を防止
           toggleInteraction();
         }
       });
+
+      // Media Session API: OS/ブラウザがメディアキーを横取りする場合に対応
+      // シャッターリモコンのキーが keydown より先に Media Session へ届く端末で有効
+      if ('mediaSession' in navigator) {
+        const mediaSessionHandler = () => {
+          // appStatus のチェックは toggleInteraction 内に委ねる（二重起動防止もそちらで完結）
+          toggleInteraction();
+        };
+        try {
+          navigator.mediaSession.setActionHandler('play', mediaSessionHandler);
+          navigator.mediaSession.setActionHandler('pause', mediaSessionHandler);
+          console.log('[MediaSession] play/pause handlers registered.');
+        } catch (e) {
+          console.warn('[MediaSession] setActionHandler not supported:', e);
+        }
+      }
     }
 
     // -------------------------------------------------------------------------
