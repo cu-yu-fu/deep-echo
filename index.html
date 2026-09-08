@@ -1103,10 +1103,10 @@
         });
       }
 
-      // 2. 無音WAVのAudio要素の生成とループ再生設定
+      // 2. 無音WAVのAudio要素の生成とループ再生設定（Android Chromeのメディア通知基準を満たすため10秒長で生成）
       if (!silentMediaElement) {
         const sampleRate = 8000;
-        const durationSeconds = 1;
+        const durationSeconds = 10; // Chromeの「5秒未満は通知パネル・リモコン制御を生成しない」制限を突破するため10秒に拡張
         const sampleCount = sampleRate * durationSeconds;
         const wavBuffer = new ArrayBuffer(44 + sampleCount * 2);
         const view = new DataView(wavBuffer);
@@ -1135,10 +1135,21 @@
           new Blob([wavBuffer], { type: 'audio/wav' })
         );
         silentMediaElement = new Audio(silentMediaObjectUrl);
+        silentMediaElement.id = 'silentMediaElement';
         silentMediaElement.loop = true;
         silentMediaElement.preload = 'auto';
         silentMediaElement.playsInline = true;
         silentMediaElement.setAttribute('aria-hidden', 'true');
+        silentMediaElement.style.position = 'fixed';
+        silentMediaElement.style.width = '0';
+        silentMediaElement.style.height = '0';
+        silentMediaElement.style.opacity = '0';
+        silentMediaElement.style.pointerEvents = 'none';
+
+        // DOM上に明示的に配置して保持（GC回収やChromeによるバックグラウンド破棄を防止）
+        if (document.body && !document.getElementById('silentMediaElement')) {
+          document.body.appendChild(silentMediaElement);
+        }
 
         // リモコン押下やブラウザによる一時停止を検知し、即座に再生状態へ復帰させて優先権を死守する
         silentMediaElement.addEventListener('pause', () => {
@@ -1157,6 +1168,11 @@
             navigator.mediaSession.playbackState = 'playing';
           }
         });
+      }
+
+      // DOMツリーへの接続を常に担保
+      if (silentMediaElement && !silentMediaElement.isConnected && document.body) {
+        document.body.appendChild(silentMediaElement);
       }
 
       // 3. 再生状態の強制維持
