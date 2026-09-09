@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Gemini Voice Agent - Smart Speaker</title>
-  <meta name="description" content="音声シャッターリモコン操作対応のGeminiスマートスピーカークライアント" />
   <!-- Google Fonts Outfit & M PLUS Rounded 1c -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -589,7 +588,7 @@
   <div class="info-container">
     <div id="contextBox" class="context-box"></div>
     <div id="transcriptBox" class="transcript-box">
-      <div class="log-item log-assistant">初期化完了。上のマイクボタンをタップ、または <span class="key-badge">Space</span>/<span class="key-badge">Enter</span>/<span class="key-badge">音量キー</span>/<span class="key-badge">リモコン</span> で会話を開始できます。</div>
+      <div class="log-item log-assistant">初期化完了。上のマイクボタンをタップ、または <span class="key-badge">Space</span>/<span class="key-badge">Enter</span>/<span class="key-badge">音量キー</span> で会話を開始できます。</div>
     </div>
   </div>
 
@@ -688,8 +687,6 @@
     // 状態管理＆定数定義
     // -------------------------------------------------------------------------
     let appStatus = 'idle'; // 'idle', 'recording', 'thinking', 'speaking'
-    const TOGGLE_DEBOUNCE_MS = 500;
-    let lastToggleInteractionAt = -Infinity;
     // キャンセル済みの非同期ターンを識別し、遅れて届く応答を破棄する。
     let sessionGeneration = 0;
     let apiKey = '';
@@ -722,8 +719,6 @@
     let nextPlayTime = 0;
     const LIVE_SAMPLE_RATE = 24000;
     let activeSourceNodes = [];
-    let silentMediaElement = null;
-    let silentMediaObjectUrl = null;
 
     // ポクポク木魚音
     let pokupokuIntervalId = null;
@@ -747,11 +742,6 @@
       // 初回のアクティベーション（Wake Lock、AudioContextの確保）は
       // ユーザーの最初のアクション（画面タップ）に委ねる
       requestWakeLock();
-
-      // 自動再生制限を満たす最初のユーザー操作で無音メディアを開始する。
-      const activateAudio = () => initAudioContext();
-      window.addEventListener('pointerdown', activateAudio, { once: true, capture: true });
-      window.addEventListener('keydown', activateAudio, { once: true, capture: true });
     });
 
     function loadSettings() {
@@ -949,7 +939,7 @@
     }
 
     // -------------------------------------------------------------------------
-    // 物理ボタン & キーボード監視 (音量キー, Enter, Space, MediaPlayPause)
+    // 物理ボタン & キーボード監視 (音量キー, Enter, Space)
     // -------------------------------------------------------------------------
     function setupKeyListeners() {
       window.addEventListener('keydown', (e) => {
@@ -959,41 +949,11 @@
           return;
         }
 
-        if (
-          e.key === ' ' || e.key === 'Enter' ||
-          e.key === 'VolumeUp' || e.key === 'VolumeDown' ||
-          e.key === 'MediaPlayPause' || e.key === 'Play' || e.key === 'Pause' ||
-          e.key === 'MediaTrackNext' || e.key === 'MediaTrackPrevious' ||
-          e.code === 'MediaPlayPause' || e.code === 'MediaSelect'
-        ) {
-          e.preventDefault(); // 音量変更やスクロール・メディア操作の既定動作を防止
-          ensureMediaSessionActive();
+        if (e.key === ' ' || e.key === 'Enter' || e.key === 'VolumeUp' || e.key === 'VolumeDown') {
+          e.preventDefault(); // 音量変更やスクロールなどの既定動作を防止
           toggleInteraction();
         }
       });
-
-      // Media Session API: OS/ブラウザがメディアキーを横取りする場合に対応
-      // シャッターリモコンのキーが keydown より先に Media Session へ届く端末で有効
-      if ('mediaSession' in navigator) {
-        const mediaSessionHandler = () => {
-          // リモコン押下時にChromeが無音音声を一時停止させ、OSのリモコン優先権が外れるのを防ぐため、
-          // 再生状態を即座に再保証した上でトグルを実行する
-          ensureMediaSessionActive();
-          toggleInteraction();
-          // 一時停止状態に切り替わらないよう playbackState を明示的に 'playing' に維持
-          navigator.mediaSession.playbackState = 'playing';
-        };
-
-        const actionList = ['play', 'pause', 'stop', 'previoustrack', 'nexttrack'];
-        actionList.forEach((action) => {
-          try {
-            navigator.mediaSession.setActionHandler(action, mediaSessionHandler);
-            console.log(`[MediaSession] ${action} handler registered.`);
-          } catch (e) {
-            console.warn(`[MediaSession] Action handler for ${action} not supported:`, e);
-          }
-        });
-      }
     }
 
     // -------------------------------------------------------------------------
@@ -1078,118 +1038,6 @@
       if (audioCtx.state === 'suspended') {
         audioCtx.resume();
       }
-      ensureMediaSessionActive();
-    }
-
-    // 無音のWAVをHTMLMediaElementでループ再生し、OSにメディア再生中と認識させる。
-    // muted/volume=0 はMedia Sessionの対象外になり得るため、PCMデータ自体を無音にする。
-    // Android ChromeではMediaMetadataの設定とplaybackState='playing'の維持が必須。
-    function ensureMediaSessionActive() {
-      if (!('mediaSession' in navigator)) return;
-
-      // 1. Android Chrome等のOSにリモコン優先権を維持させるためのMediaMetadata設定
-      if (!navigator.mediaSession.metadata) {
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title: 'Gemini Voice Agent',
-          artist: 'Smart Speaker',
-          album: '音声リモコン待受中',
-          artwork: [
-            {
-              src: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><circle cx="48" cy="48" r="48" fill="%23111111"/><circle cx="48" cy="48" r="28" fill="%232cb67d"/></svg>',
-              sizes: '96x96',
-              type: 'image/svg+xml'
-            }
-          ]
-        });
-      }
-
-      // 2. 無音WAVのAudio要素の生成とループ再生設定（Android Chromeのメディア通知基準を満たすため10秒長で生成）
-      if (!silentMediaElement) {
-        const sampleRate = 8000;
-        const durationSeconds = 10; // Chromeの「5秒未満は通知パネル・リモコン制御を生成しない」制限を突破するため10秒に拡張
-        const sampleCount = sampleRate * durationSeconds;
-        const wavBuffer = new ArrayBuffer(44 + sampleCount * 2);
-        const view = new DataView(wavBuffer);
-
-        const writeAscii = (offset, value) => {
-          for (let i = 0; i < value.length; i++) {
-            view.setUint8(offset + i, value.charCodeAt(i));
-          }
-        };
-
-        writeAscii(0, 'RIFF');
-        view.setUint32(4, 36 + sampleCount * 2, true);
-        writeAscii(8, 'WAVE');
-        writeAscii(12, 'fmt ');
-        view.setUint32(16, 16, true);
-        view.setUint16(20, 1, true); // PCM
-        view.setUint16(22, 1, true); // mono
-        view.setUint32(24, sampleRate, true);
-        view.setUint32(28, sampleRate * 2, true);
-        view.setUint16(32, 2, true);
-        view.setUint16(34, 16, true);
-        writeAscii(36, 'data');
-        view.setUint32(40, sampleCount * 2, true);
-
-        silentMediaObjectUrl = URL.createObjectURL(
-          new Blob([wavBuffer], { type: 'audio/wav' })
-        );
-        silentMediaElement = new Audio(silentMediaObjectUrl);
-        silentMediaElement.id = 'silentMediaElement';
-        silentMediaElement.loop = true;
-        silentMediaElement.preload = 'auto';
-        silentMediaElement.playsInline = true;
-        silentMediaElement.setAttribute('aria-hidden', 'true');
-        silentMediaElement.style.position = 'fixed';
-        silentMediaElement.style.width = '0';
-        silentMediaElement.style.height = '0';
-        silentMediaElement.style.opacity = '0';
-        silentMediaElement.style.pointerEvents = 'none';
-
-        // DOM上に明示的に配置して保持（GC回収やChromeによるバックグラウンド破棄を防止）
-        if (document.body && !document.getElementById('silentMediaElement')) {
-          document.body.appendChild(silentMediaElement);
-        }
-
-        // リモコン押下やブラウザによる一時停止を検知し、即座に再生状態へ復帰させて優先権を死守する
-        silentMediaElement.addEventListener('pause', () => {
-          console.log('[MediaSession] silentMediaElement pause event detected, forcing resume...');
-          silentMediaElement.play().catch((e) => {
-            console.warn('[MediaSession] Auto resume blocked:', e);
-          });
-          if ('mediaSession' in navigator) {
-            navigator.mediaSession.playbackState = 'playing';
-          }
-        });
-
-        silentMediaElement.addEventListener('ended', () => {
-          silentMediaElement.play().catch(() => {});
-          if ('mediaSession' in navigator) {
-            navigator.mediaSession.playbackState = 'playing';
-          }
-        });
-      }
-
-      // DOMツリーへの接続を常に担保
-      if (silentMediaElement && !silentMediaElement.isConnected && document.body) {
-        document.body.appendChild(silentMediaElement);
-      }
-
-      // 3. 再生状態の強制維持
-      if (silentMediaElement.paused) {
-        const playPromise = silentMediaElement.play();
-        if (playPromise) {
-          playPromise
-            .then(() => {
-              navigator.mediaSession.playbackState = 'playing';
-            })
-            .catch((error) => {
-              console.warn('[MediaSession] Silent media playback was blocked:', error);
-            });
-        }
-      } else {
-        navigator.mediaSession.playbackState = 'playing';
-      }
     }
 
     function playPokupokuSound() {
@@ -1235,53 +1083,44 @@
     function playPCMChunk(base64Data, generation = sessionGeneration) {
       if (generation !== sessionGeneration) return;
 
+      pendingChunks++; // チャンク数を加算
       initAudioContext();
-      if (!audioCtx) return;
-
-      // 1. base64 文字列をバイナリバイト配列へデコード
+      
+      // base64からArrayBufferへ変換
       const binaryString = atob(base64Data);
       const len = binaryString.length;
-      if (len < 2) return; // 16bit PCM (最低2バイト必要)
-
       const bytes = new Uint8Array(len);
       for (let i = 0; i < len; i++) {
         bytes[i] = binaryString.charCodeAt(i);
       }
-
-      // 2. 16-bit PCM (Little Endian, Mono, 24kHz) から Float32Array への正規化代入
-      //    奇数バイトで RangeError が出ないよう、サンプル数を Math.floor(len / 2) で確定
-      const sampleCount = Math.floor(len / 2);
-      const float32Array = new Float32Array(sampleCount);
-      const dataView = new DataView(bytes.buffer, bytes.byteOffset, len);
-
-      for (let i = 0; i < sampleCount; i++) {
-        // リトルエンディアンで 16bit 整数を取得し、-1.0 〜 +1.0 の浮動小数点数へ変換代入
-        const int16 = dataView.getInt16(i * 2, true);
-        float32Array[i] = int16 < 0 ? int16 / 32768.0 : int16 / 32767.0;
+      
+      // 16-bit PCM (Little Endian, Mono, 24kHz)
+      const buffer = bytes.buffer;
+      const int16Array = new Int16Array(buffer);
+      const float32Array = new Float32Array(int16Array.length);
+      
+      for (let i = 0; i < int16Array.length; i++) {
+        float32Array[i] = int16Array[i] / 32768.0;
       }
-
-      // 3. Web Audio API の AudioBuffer を生成してチャンネルバッファへ確実に代入
-      const audioBuffer = audioCtx.createBuffer(1, sampleCount, LIVE_SAMPLE_RATE);
-      audioBuffer.getChannelData(0).set(float32Array);
-
-      // 4. 再生ソースノードの生成とスケジューリング
-      pendingChunks++; // 有効なチャンクが確定した時点で加算
+      
+      const audioBuffer = audioCtx.createBuffer(1, float32Array.length, LIVE_SAMPLE_RATE);
+      audioBuffer.copyToChannel(float32Array, 0);
+      
       const source = audioCtx.createBufferSource();
       source.buffer = audioBuffer;
       source.playbackRate.value = 1.1;
-
+      
       // 解析器 (AnalyserNode) を通して音量を取得できるようにする
       source.connect(analyser);
       analyser.connect(audioCtx.destination);
-
+      
       // 再生時間を隙間なくスケジューリング
-      const currentTime = audioCtx.currentTime;
-      const startTime = Math.max(currentTime, nextPlayTime);
+      const startTime = Math.max(audioCtx.currentTime, nextPlayTime);
       source.start(startTime);
-
+      
       activeSourceNodes.push(source);
       nextPlayTime = startTime + (audioBuffer.duration / 1.1);
-
+      
       // 最初の音声パケットが届いた時点で「ポクポク音」を止め、解説状態(speaking)に移行
       if (appStatus === 'thinking') {
         stopPokupoku();
@@ -1311,7 +1150,6 @@
       // 再生完了の成一拍を見せるため100ms遅延してから「フワッ」SEを再生
       playSystemSound('gentle_end');
       setAppStatus('idle');
-      ensureMediaSessionActive();
       // WebSocketの接続をクローズしてセッション終了
       if (liveWebSocket && liveWebSocket.readyState === WebSocket.OPEN) {
         liveWebSocket.close();
@@ -1377,13 +1215,6 @@
     // 対話フローのトグル制御 (録音開始 / 停止)
     // -------------------------------------------------------------------------
     async function toggleInteraction() {
-      const now = performance.now();
-      if (now - lastToggleInteractionAt < TOGGLE_DEBOUNCE_MS) {
-        console.debug('[Input] Duplicate toggle ignored.');
-        return;
-      }
-      lastToggleInteractionAt = now;
-
       // 音声デコーダの初期化とコンテキスト有効化
       initAudioContext();
       
@@ -1408,7 +1239,6 @@
         stopAllSpeakingAudio();
         stopPokupoku();
         stopVisualizer();
-        ensureMediaSessionActive();
         if (liveWebSocket && liveWebSocket.readyState !== WebSocket.CLOSED) {
           liveWebSocket.close();
           liveWebSocket = null;
@@ -1862,7 +1692,6 @@
               liveWebSocket.close();
             }
             setAppStatus('idle');
-            ensureMediaSessionActive();
             addLog('[Live API]: 音声の受信タイムアウトが発生したため、待機状態に強制復帰しました。', 'assistant');
           }
         }, 30000);
@@ -1963,7 +1792,6 @@
               : `[Live API]: サーバーから音声が返ってきませんでした (code: ${event.code})。モデル名または APIキーを確認してください。`;
             stopPokupoku();
             setAppStatus('idle');
-            ensureMediaSessionActive();
             addLog(msg, 'assistant');
           } else {
             // turnComplete側で既にタイマーが走っているため不要
@@ -1976,7 +1804,6 @@
           console.error('Live API WebSocket error:', err);
           stopPokupoku();
           setAppStatus('idle');
-          ensureMediaSessionActive();
           addLog('[エラー]: Live APIとの接続でエラーが発生しました。', 'assistant');
         };
 
@@ -1986,7 +1813,6 @@
         console.error('Failed to establish Live API connection:', err);
         stopPokupoku();
         setAppStatus('idle');
-        ensureMediaSessionActive();
       }
     }
   </script>
